@@ -37,6 +37,15 @@
         android:textAllCaps="false"
         app:layout_constraintTop_toBottomOf="@+id/bluetooth_open_btn"
         app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toLeftOf="@+id/bluetooth_finddevices_btn" />
+    <Button
+        android:id="@+id/bluetooth_finddevices_btn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAllCaps="false"
+        android:text="Find Devices"
+        app:layout_constraintTop_toBottomOf="@+id/bluetooth_open_btn"
+        app:layout_constraintLeft_toRightOf="@+id/bluetooth_disconnect_btn"
         app:layout_constraintRight_toRightOf="parent" />
 
     <LinearLayout

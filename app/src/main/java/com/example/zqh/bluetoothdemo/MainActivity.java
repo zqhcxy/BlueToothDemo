@@ -6,6 +6,9 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanResult;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -36,7 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     private static final int REQUEST_ENABLE_BT = 10;
 
@@ -48,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView mProgressTextView;
     private ProgressBar progressBar;
     private Button mDisConnectBtn;
+    private Button mFindDevicesBtn;
 
     private RecyclerView mRecyclerView;
 
@@ -80,29 +84,14 @@ public class MainActivity extends AppCompatActivity {
         mProgressTextView = findViewById(R.id.progress_tv);
         progressBar = findViewById(R.id.progress);
         mDisConnectBtn = findViewById(R.id.bluetooth_disconnect_btn);
+        mFindDevicesBtn = findViewById(R.id.bluetooth_finddevices_btn);
 
         mRecyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
 
-        bluetooth_open_btn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                goBluetooth();
-            }
-        });
-
-        bluetooth_setting_btn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openSetting();
-            }
-        });
-
-        mDisConnectBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                disConnectBluetooth();
-            }
-        });
+        bluetooth_open_btn.setOnClickListener(this);
+        bluetooth_setting_btn.setOnClickListener(this);
+        mDisConnectBtn.setOnClickListener(this);
+        mFindDevicesBtn.setOnClickListener(this);
 
     }
 
@@ -141,6 +130,7 @@ public class MainActivity extends AppCompatActivity {
         //注册广播监听蓝牙连接状态
         IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        filter.addAction(BluetoothDevice.ACTION_FOUND);
         registerReceiver(receiver, filter);
     }
 
@@ -173,17 +163,35 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * 蓝牙扫描设备的提示
+     * @param showProgress
+     * @param tipStr
+     */
+    private void updateBluetoothDiscoverTip(boolean showProgress,String tipStr){
+        progressBar.setVisibility(showProgress ? View.VISIBLE : View.INVISIBLE);
+        mProgressTextView.setText(tipStr);
+    }
+
+    /**
      * 蓝牙连接与断开连接监听
      */
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+            Log.i("BLUETOOTHTAG", "onReceive action: "+action);
             if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action) || BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 String deviceName = device.getName();
                 String deviceHardwareAddress = device.getAddress(); // MAC address
                 int bluetoothState = device.getBondState();
-                Log.i("BLUETOOTHTAG", "deviceName : " + deviceName + "\n deviceHardwareAddress : " + deviceHardwareAddress + "\n bluetoothState： " + bluetoothState);
+                Log.i("BLUETOOTHTAG", "connect device deviceName : " + deviceName + "\n deviceHardwareAddress : " + deviceHardwareAddress + "\n bluetoothState： " + bluetoothState);
+            }else if(BluetoothDevice.ACTION_FOUND.equals(action)){//发现设备
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                String deviceName = device.getName();
+                String deviceHardwareAddress = device.getAddress(); // MAC address
+                int bluetoothState = device.getBondState();
+                updateBluetoothDiscoverTip(true,"find device:  "+deviceName+"  address: "+deviceHardwareAddress);
+                Log.i("BLUETOOTHTAG", "find device deviceName : " + deviceName + "\n deviceHardwareAddress : " + deviceHardwareAddress + "\n bluetoothState： " + bluetoothState);
             }
         }
     };
@@ -207,7 +215,57 @@ public class MainActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
+    /**
+     * 扫描设备
+     */
+    private void disconverDevices(){
+        //当前有连接设备时，不能扫描，因为扫描会占用大量带宽
+        if(mBluetoothGatt!=null) return;
+        if(bluetoothAdapter.isDiscovering()){//如果在扫描，就关闭扫描
+           bluetoothAdapter.cancelDiscovery();
+           updateBluetoothDiscoverTip(false,"Cancel Discobery");
+           return;
+        }
+        if (bluetoothAdapter!=null&&bluetoothAdapter.isEnabled()) {
+            //第一种方式扫描(广播)
+            boolean dicover =  bluetoothAdapter.startDiscovery();
+            updateBluetoothDiscoverTip(true,"Start Discobery...");
+            Log.i("BLUETOOTHTAG", "discover result: "+dicover);
+            //第二种方式,回调
+//            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+//                BluetoothLeScanner leScanner =bluetoothAdapter.getBluetoothLeScanner();
+//                leScanner.startScan(scanCallback);
+//            }
+        }
+    }
 
+
+
+    /**
+     * 蓝牙扫描的回调
+     */
+  private ScanCallback scanCallback =  new ScanCallback() {
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+//                        super.onScanResult(callbackType, result);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                Log.i("BLUETOOTHTAG", "discover onScanResult callbackType: "+callbackType+ "device name: "+result.getDevice().getName());
+            }
+
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+//            super.onScanFailed(errorCode);
+            Log.i("BLUETOOTHTAG", "discover onScanFailed");
+        }
+
+        @Override
+        public void onBatchScanResults(List<ScanResult> results) {
+//            super.onBatchScanResults(results);
+            Log.i("BLUETOOTHTAG", "discover onBatchScanResults");
+        }
+    };
 //    private BluetoothProfile.ServiceListener profileListener = new BluetoothProfile.ServiceListener() {
 //        public void onServiceConnected(int profile, BluetoothProfile proxy) {
 //            if (profile == BluetoothProfile.HEADSET) {
@@ -300,6 +358,24 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(receiver);
+    }
+
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()){
+            case R.id.bluetooth_open_btn://打开蓝牙
+                goBluetooth();
+                break;
+            case R.id.bluetooth_setting_btn://打开系统蓝牙界面
+                openSetting();
+                break;
+            case R.id.bluetooth_disconnect_btn://断开蓝牙连接
+                disConnectBluetooth();
+                break;
+            case R.id.bluetooth_finddevices_btn://扫描蓝牙
+                disconverDevices();
+                break;
+        }
     }
 
 
